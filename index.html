@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador SAC — Financiamento Imobiliário</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --fg: #1a1d21; --muted: #6b7280;
+    --line: #e3e6ea; --accent: #2563eb; --good: #059669; --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171a; --card:#1c2024; --fg:#e8eaed; --muted:#9aa3ad;
+            --line:#2c3238; --accent:#60a5fa; --good:#34d399; --warn:#fbbf24; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg);
+         font:15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  h2 { font-size:15px; margin:0 0 12px; color:var(--muted); font-weight:600;
+       text-transform:uppercase; letter-spacing:.04em; }
+  .wrap { max-width:1200px; margin:0 auto; display:grid; gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  input, select { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px;
+                  background:var(--bg); color:var(--fg); font:inherit; }
+  input:focus, select:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  button { padding:8px 14px; border:1px solid var(--line); border-radius:6px; background:var(--card);
+           color:var(--fg); font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .hint { font-size:12px; color:var(--warn); margin-top:8px; }
+  .amort-row { display:grid; gap:8px; align-items:end; margin-bottom:8px;
+               grid-template-columns:repeat(5,1fr) auto; }
+  @media (max-width:760px) { .amort-row { grid-template-columns:1fr 1fr; } }
+  .cards { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); }
+  .stat { border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .stat .k { font-size:12px; color:var(--muted); }
+  .stat .v { font-size:20px; font-weight:600; margin:2px 0; font-variant-numeric:tabular-nums; }
+  .stat .b { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .stat .d { font-size:13px; font-weight:600; color:var(--good); font-variant-numeric:tabular-nums; }
+  .tbox { max-height:420px; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; font-variant-numeric:tabular-nums; }
+  th, td { padding:5px 10px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { position:sticky; top:0; background:var(--card); text-align:right; font-size:12px;
+       color:var(--muted); z-index:1; }
+  th:first-child, td:first-child { text-align:left; }
+  tr.extra td { background:color-mix(in srgb, var(--good) 12%, transparent); font-weight:600; }
+  .row-between { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  #testes { padding:10px 14px; border-radius:8px; margin-bottom:12px; font-weight:600; display:none; }
+  canvas { max-height:320px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="testes"></div>
+
+  <div>
+    <h1>Simulador SAC — financiamento imobiliário</h1>
+    <div style="color:var(--muted);font-size:13px">
+      Tabela SAC com amortizações extras. Tudo roda no navegador, nada é enviado a lugar nenhum.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Financiamento</h2>
+    <div class="grid">
+      <div><label for="imovel">Valor do imóvel (R$)</label><input id="imovel" type="number" step="1000" value="500000"></div>
+      <div><label for="financiado">Valor financiado (R$)</label><input id="financiado" type="number" step="1000" value="400000"></div>
+      <div><label for="taxa">Juros anual (%)</label><input id="taxa" type="number" step="0.01" value="10"></div>
+      <div>
+        <label for="regime">Conversão da taxa</label>
+        <select id="regime">
+          <option value="equivalente">Equivalente — (1+ia)^(1/12)−1</option>
+          <option value="nominal">Nominal — ia/12</option>
+        </select>
+      </div>
+      <div><label for="nparcelas">Nº de parcelas</label><input id="nparcelas" type="number" step="1" value="360"></div>
+      <div><label>Entrada</label><input id="entrada" disabled></div>
+    </div>
+    <div class="hint">
+      Confira a 1ª parcela contra a simulação do seu banco. Se não bater, troque a conversão da taxa
+      (bancos usam os dois regimes) — a diferença em 360 meses é grande.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row-between" style="margin-bottom:12px">
+      <h2 style="margin:0">Amortizações extras</h2>
+      <button id="add">+ adicionar amortização</button>
+    </div>
+    <div id="amorts"></div>
+    <div id="vazio" style="color:var(--muted);font-size:13px">
+      Nenhuma amortização. Sem elas o resultado é o SAC puro do contrato.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Comparação</h2>
+    <div class="cards" id="resumo"></div>
+  </div>
+
+  <div class="card">
+    <h2>Composição da parcela mês a mês</h2>
+    <canvas id="g1"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Saldo devedor</h2>
+    <canvas id="g2"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="row-between" style="margin-bottom:12px">
+      <h2 style="margin:0">Parcela a parcela</h2>
+      <button id="csv">Exportar CSV</button>
+    </div>
+    <div class="tbox"><table>
+      <thead><tr>
+        <th>Mês</th><th>Saldo inicial</th><th>Juros</th><th>Amortização</th>
+        <th>Extra</th><th>Parcela</th><th>Saldo final</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table></div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+// ---------- motor ----------
+
+const c = v => Math.round(v * 100) / 100;   // centavos
+const EPS = 0.005;
+
+function taxaMensal(anualPct, regime) {
+  const ia = anualPct / 100;
+  return regime === 'nominal' ? ia / 12 : Math.pow(1 + ia, 1 / 12) - 1;
+}
+
+// dispara em mesInicio, mesInicio+freq, ... enquanto <= mesFim
+function dispara(am, mes) {
+  if (mes < am.mesInicio || mes > am.mesFim) return false;
+  const f = am.frequencia > 0 ? am.frequencia : Infinity;
+  return f === Infinity ? mes === am.mesInicio : (mes - am.mesInicio) % f === 0;
+}
+
+// Ordem dentro do mês: juros -> amortização ordinária -> parcela -> extras -> reajuste.
+function simular({ financiado, i, nParcelas, amortizacoes = [] }) {
+  let saldo = c(financiado);
+  let amort = financiado / nParcelas;   // amortização ordinária corrente
+  let prazoRestante = nParcelas;        // prazo contratual que ainda falta
+  const linhas = [];
+
+  while (saldo > EPS && prazoRestante > 0 && linhas.length < 2000) {
+    const mes = linhas.length + 1;
+    const saldoInicial = saldo;
+    const juros = c(saldo * i);
+
+    let a = c(Math.min(amort, saldo));
+    // se o que sobraria não daria nem uma amortização cheia, quita agora:
+    // a última parcela absorve o resíduo em vez de virar uma parcela de centavos
+    if (saldo - a < amort - EPS || prazoRestante === 1) a = c(saldo);
+
+    const parcela = c(a + juros);
+    saldo = c(saldo - a);
+    prazoRestante--;
+
+    let extra = 0;
+    for (const am of amortizacoes) {          // sequencial, na ordem criada
+      if (saldo <= EPS) break;
+      if (!dispara(am, mes)) continue;
+      const v = c(Math.min(am.valor, saldo));
+      if (v <= 0) continue;
+      saldo = c(saldo - v);
+      extra = c(extra + v);
+      if (saldo <= EPS) break;
+      if (am.modo === 'prazo') prazoRestante = Math.ceil(saldo / amort);  // amort fixa
+      else if (prazoRestante > 0) amort = saldo / prazoRestante;          // prazo fixo
+    }
+
+    linhas.push({ mes, saldoInicial, juros, amortizacao: a, extra, parcela, saldoFinal: saldo });
+  }
+
+  const soma = k => c(linhas.reduce((s, l) => s + l[k], 0));
+  return {
+    linhas,
+    resumo: {
+      prazoMeses: linhas.length,
+      totalJuros: soma('juros'),
+      totalPago: c(soma('parcela') + soma('extra')),
+      primeiraParcela: linhas.length ? linhas[0].parcela : 0,
+      ultimaParcela: linhas.length ? linhas[linhas.length - 1].parcela : 0,
+    }
+  };
+}
+
+// ---------- estado ----------
+
+const $ = id => document.getElementById(id);
+const CAMPOS = ['imovel', 'financiado', 'taxa', 'regime', 'nparcelas'];
+const KEY = 'sac-sim-v1';
+let amortizacoes = [];
+
+function lerCampos() {
+  return {
+    imovel: +$('imovel').value || 0,
+    financiado: +$('financiado').value || 0,
+    taxa: +$('taxa').value || 0,
+    regime: $('regime').value,
+    nParcelas: Math.max(1, Math.round(+$('nparcelas').value || 1)),
+  };
+}
+
+function salvar() {
+  const s = lerCampos();
+  s.amortizacoes = amortizacoes;
+  localStorage.setItem(KEY, JSON.stringify(s));
+}
+
+function carregar() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (!s) return;
+    for (const k of CAMPOS) {
+      const v = k === 'nparcelas' ? s.nParcelas : s[k];
+      if (v !== undefined && $(k)) $(k).value = v;
+    }
+    if (Array.isArray(s.amortizacoes)) amortizacoes = s.amortizacoes;
+  } catch { /* estado corrompido: ignora e usa os defaults */ }
+}
+
+// ---------- UI: amortizações ----------
+
+function renderAmorts() {
+  const box = $('amorts');
+  box.innerHTML = '';
+  $('vazio').style.display = amortizacoes.length ? 'none' : 'block';
+
+  amortizacoes.forEach((am, idx) => {
+    const div = document.createElement('div');
+    div.className = 'amort-row';
+    div.innerHTML = `
+      <div><label>Valor (R$)</label><input type="number" step="500" data-f="valor" value="${am.valor}"></div>
+      <div><label>Da parcela</label><input type="number" step="1" data-f="mesInicio" value="${am.mesInicio}"></div>
+      <div><label>Até a parcela</label><input type="number" step="1" data-f="mesFim" value="${am.mesFim}"></div>
+      <div><label>A cada (meses)</label><input type="number" step="1" data-f="frequencia" value="${am.frequencia}"></div>
+      <div><label>Modo</label><select data-f="modo">
+        <option value="prazo"${am.modo === 'prazo' ? ' selected' : ''}>Reduzir prazo</option>
+        <option value="parcela"${am.modo === 'parcela' ? ' selected' : ''}>Reduzir parcela</option>
+      </select></div>
+      <div><button data-del="1" title="remover">✕</button></div>`;
+
+    div.addEventListener('input', e => {
+      const f = e.target.dataset.f;
+      if (!f) return;
+      amortizacoes[idx][f] = f === 'modo' ? e.target.value : +e.target.value || 0;
+      atualizar();
+    });
+    div.querySelector('[data-del]').addEventListener('click', () => {
+      amortizacoes.splice(idx, 1);
+      renderAmorts();
+      atualizar();
+    });
+    box.appendChild(div);
+  });
+}
+
+// ---------- render ----------
+
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmt = v => brl.format(v || 0);
+
+function prazoTxt(m) {
+  return `${m} meses (${Math.floor(m / 12)}a ${m % 12}m)`;
+}
+
+let g1 = null, g2 = null;
+let ultimaSimulacao = null;
+
+function stat(k, v, base, diff) {
+  return `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>
+    <div class="b">base: ${base}</div>${diff ? `<div class="d">${diff}</div>` : ''}</div>`;
+}
+
+function atualizar() {
+  const s = lerCampos();
+  $('entrada').value = fmt(Math.max(0, s.imovel - s.financiado));
+  salvar();
+
+  const i = taxaMensal(s.taxa, s.regime);
+  const base = simular({ financiado: s.financiado, i, nParcelas: s.nParcelas });
+  const novo = simular({ financiado: s.financiado, i, nParcelas: s.nParcelas, amortizacoes });
+  ultimaSimulacao = novo;
+
+  const mesesEcon = base.resumo.prazoMeses - novo.resumo.prazoMeses;
+  const jurosEcon = c(base.resumo.totalJuros - novo.resumo.totalJuros);
+
+  $('resumo').innerHTML =
+    stat('Prazo', prazoTxt(novo.resumo.prazoMeses), prazoTxt(base.resumo.prazoMeses),
+         mesesEcon > 0 ? `−${mesesEcon} meses` : '') +
+    stat('Total de juros', fmt(novo.resumo.totalJuros), fmt(base.resumo.totalJuros),
+         jurosEcon > 0 ? `economia de ${fmt(jurosEcon)}` : '') +
+    stat('Total pago', fmt(novo.resumo.totalPago), fmt(base.resumo.totalPago),
+         base.resumo.totalPago > novo.resumo.totalPago
+           ? `−${fmt(c(base.resumo.totalPago - novo.resumo.totalPago))}` : '') +
+    stat('1ª parcela', fmt(novo.resumo.primeiraParcela), fmt(base.resumo.primeiraParcela), '') +
+    stat('Última parcela', fmt(novo.resumo.ultimaParcela), fmt(base.resumo.ultimaParcela), '');
+
+  desenhar(base, novo);
+  tabela(novo.linhas);
+}
+
+function desenhar(base, novo) {
+  // eixo X = o cenário mais longo, para as duas curvas caberem inteiras
+  const maior = base.linhas.length >= novo.linhas.length ? base : novo;
+  const labels = maior.linhas.map(l => l.mes);
+  const opt = {
+    responsive: true, animation: false, interaction: { mode: 'index', intersect: false },
+    plugins: { tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } } },
+    scales: { x: { title: { display: true, text: 'mês' } },
+              y: { ticks: { callback: v => brl.format(v).replace(/\s?R\$\s?/, '') } } },
+  };
+
+  const d1 = {
+    labels,
+    datasets: [
+      { label: 'Amortização', data: novo.linhas.map(l => l.amortizacao),
+        backgroundColor: '#2563eb', stack: 'p', type: 'bar' },
+      { label: 'Juros', data: novo.linhas.map(l => l.juros),
+        backgroundColor: '#f59e0b', stack: 'p', type: 'bar' },
+      { label: 'Parcela sem amortizar', data: base.linhas.map(l => l.parcela),
+        type: 'line', borderColor: '#ef4444', borderDash: [5, 4], pointRadius: 0, borderWidth: 2 },
+    ],
+  };
+  const o1 = { ...opt, scales: { ...opt.scales, x: { ...opt.scales.x, stacked: true },
+                                 y: { ...opt.scales.y, stacked: true } } };
+
+  const d2 = {
+    labels,
+    datasets: [
+      { label: 'Saldo com amortizações', data: novo.linhas.map(l => l.saldoFinal),
+        borderColor: '#059669', pointRadius: 0, borderWidth: 2 },
+      { label: 'Saldo sem amortizar', data: base.linhas.map(l => l.saldoFinal),
+        borderColor: '#ef4444', borderDash: [5, 4], pointRadius: 0, borderWidth: 2 },
+    ],
+  };
+
+  if (g1) { g1.data = d1; g1.options = o1; g1.update(); }
+  else g1 = new Chart($('g1'), { type: 'bar', data: d1, options: o1 });
+
+  if (g2) { g2.data = d2; g2.update(); }
+  else g2 = new Chart($('g2'), { type: 'line', data: d2, options: opt });
+}
+
+function tabela(linhas) {
+  $('tbody').innerHTML = linhas.map(l => `
+    <tr${l.extra > 0 ? ' class="extra"' : ''}>
+      <td>${l.mes}</td><td>${fmt(l.saldoInicial)}</td><td>${fmt(l.juros)}</td>
+      <td>${fmt(l.amortizacao)}</td><td>${l.extra ? fmt(l.extra) : '—'}</td>
+      <td>${fmt(l.parcela)}</td><td>${fmt(l.saldoFinal)}</td>
+    </tr>`).join('');
+}
+
+function exportarCsv() {
+  if (!ultimaSimulacao) return;
+  const n = v => v.toFixed(2).replace('.', ',');
+  const linhas = [['mes', 'saldo_inicial', 'juros', 'amortizacao', 'extra', 'parcela', 'saldo_final'].join(';')];
+  for (const l of ultimaSimulacao.linhas) {
+    linhas.push([l.mes, n(l.saldoInicial), n(l.juros), n(l.amortizacao),
+                 n(l.extra), n(l.parcela), n(l.saldoFinal)].join(';'));
+  }
+  const url = URL.createObjectURL(new Blob(['﻿' + linhas.join('\n')],
+                                           { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = 'financiamento-sac.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---------- auto-teste (?test=1) ----------
+
+function autoTeste() {
+  const falhas = [];
+  const ok = (cond, msg) => { if (!cond) falhas.push(msg); };
+  const perto = (a, b, tol = 0.01) => Math.abs(a - b) <= tol;
+
+  // 1. baseline SAC conferida à mão: 100k / 1% a.m. / 10 meses
+  const b = simular({ financiado: 100000, i: 0.01, nParcelas: 10 });
+  ok(b.linhas.length === 10, 'baseline deve ter 10 parcelas');
+  ok(perto(b.linhas[0].amortizacao, 10000), 'amortização mensal = 10.000');
+  ok(perto(b.linhas[0].juros, 1000), 'juros do mês 1 = 1.000');
+  ok(perto(b.linhas[0].parcela, 11000), 'parcela 1 = 11.000');
+  ok(perto(b.linhas[9].parcela, 10100), 'parcela 10 = 10.100');
+  ok(perto(b.resumo.totalJuros, 5500), 'juros totais = 5.500');
+  ok(perto(b.linhas[9].saldoFinal, 0), 'saldo final = 0');
+
+  // 2. Σ amortização + Σ extra == financiado, em todos os cenários
+  const casos = [
+    { financiado: 400000, i: 0.008, nParcelas: 360, amortizacoes: [] },
+    { financiado: 400000, i: 0.008, nParcelas: 360,
+      amortizacoes: [{ valor: 20000, mesInicio: 12, mesFim: 120, frequencia: 12, modo: 'prazo' }] },
+    { financiado: 400000, i: 0.008, nParcelas: 360,
+      amortizacoes: [{ valor: 20000, mesInicio: 12, mesFim: 120, frequencia: 12, modo: 'parcela' }] },
+    { financiado: 400000, i: 0.008, nParcelas: 360,
+      amortizacoes: [{ valor: 15000, mesInicio: 12, mesFim: 240, frequencia: 12, modo: 'prazo' },
+                     { valor: 5000, mesInicio: 12, mesFim: 240, frequencia: 24, modo: 'parcela' }] },
+  ];
+  for (const [n, cs] of casos.entries()) {
+    const r = simular(cs);
+    const soma = r.linhas.reduce((s, l) => s + l.amortizacao + l.extra, 0);
+    ok(perto(soma, cs.financiado), `caso ${n}: Σ amortizado (${soma.toFixed(2)}) = financiado`);
+    ok(r.linhas.every(l => l.saldoFinal >= -0.01), `caso ${n}: saldo nunca fica negativo`);
+    ok(perto(r.linhas[r.linhas.length - 1].saldoFinal, 0), `caso ${n}: quita zerando o saldo`);
+    const [pen, ult] = r.linhas.slice(-2);
+    ok(ult.amortizacao >= pen.amortizacao - EPS,
+       `caso ${n}: sem parcela final de centavos (última amort ${ult.amortizacao.toFixed(2)})`);
+  }
+
+  // 3. reduzir prazo: prazo E juros estritamente menores
+  const base = simular(casos[0]), prazo = simular(casos[1]), parc = simular(casos[2]);
+  ok(prazo.resumo.prazoMeses < base.resumo.prazoMeses, 'modo prazo encurta o prazo');
+  ok(prazo.resumo.totalJuros < base.resumo.totalJuros, 'modo prazo reduz os juros');
+
+  // 4. reduzir parcela: prazo igual, parcela seguinte menor
+  ok(parc.resumo.prazoMeses === base.resumo.prazoMeses, 'modo parcela mantém o prazo');
+  ok(parc.linhas[12].parcela < base.linhas[12].parcela, 'modo parcela reduz a parcela seguinte');
+  ok(parc.resumo.totalJuros < base.resumo.totalJuros, 'modo parcela também reduz os juros');
+
+  // 5. amortização maior que o saldo: quita, sem saldo negativo
+  const quita = simular({ financiado: 100000, i: 0.01, nParcelas: 10,
+    amortizacoes: [{ valor: 999999, mesInicio: 3, mesFim: 3, frequencia: 0, modo: 'prazo' }] });
+  ok(quita.linhas.length === 3, 'aporte gigante quita no mês 3');
+  ok(perto(quita.linhas[2].saldoFinal, 0), 'sem saldo negativo após quitar');
+  ok(perto(quita.linhas.reduce((s, l) => s + l.amortizacao + l.extra, 0), 100000),
+     'quitação: Σ amortizado = financiado');
+
+  const el = $('testes');
+  el.style.display = 'block';
+  el.style.background = falhas.length ? '#7f1d1d' : '#064e3b';
+  el.style.color = '#fff';
+  el.textContent = falhas.length
+    ? `${falhas.length} teste(s) falharam: ${falhas.join(' | ')}`
+    : 'Todos os testes passaram ✓';
+  falhas.forEach(f => console.error('FALHOU:', f));
+}
+
+// ---------- boot ----------
+
+carregar();
+renderAmorts();
+CAMPOS.forEach(k => $(k).addEventListener('input', atualizar));
+$('add').addEventListener('click', () => {
+  amortizacoes.push({ valor: 20000, mesInicio: 12, mesFim: 120, frequencia: 12, modo: 'prazo' });
+  renderAmorts();
+  atualizar();
+});
+$('csv').addEventListener('click', exportarCsv);
+atualizar();
+if (new URLSearchParams(location.search).get('test')) autoTeste();
+</script>
+</body>
+</html>
