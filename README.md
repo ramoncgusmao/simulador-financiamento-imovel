@@ -8,6 +8,13 @@ antes de fechar um financiamento imobiliário.
 Tudo roda no navegador. Nenhum dado é enviado a lugar nenhum — os valores ficam apenas no
 `localStorage` do seu próprio navegador.
 
+![Formulário, comparação e composição da parcela mês a mês](docs/img/visao-geral.jpg)
+
+Acima: R$ 400.000 financiados a 10% a.a. em 360 parcelas, com aporte de R$ 20.000 por ano
+entre as parcelas 12 e 120 no modo *reduzir prazo*. O financiamento cai de 360 para 180
+parcelas e a economia em juros passa de R$ 326 mil. A linha vermelha tracejada é o cenário
+sem amortizar, para comparação.
+
 ## O que faz
 
 - Tabela SAC completa, parcela a parcela: saldo devedor, juros, amortização e valor da parcela.
@@ -19,6 +26,12 @@ Tudo roda no navegador. Nenhum dado é enviado a lugar nenhum — os valores fic
 - Comparação lado a lado com o cenário sem amortizar: prazo, total de juros, total pago.
 - Gráficos da composição da parcela e do saldo devedor, com as duas curvas sobrepostas.
 - Exportação da tabela em CSV.
+
+![Gráfico do saldo devedor e tabela parcela a parcela](docs/img/saldo-e-tabela.jpg)
+
+O gráfico de saldo devedor mostra os degraus de cada aporte. Na tabela, os meses com
+amortização extra ficam destacados — no mês 12 o saldo cai de R$ 387.777,79 para
+R$ 366.666,68 com o aporte de R$ 20.000.
 
 ## Conversão da taxa
 
